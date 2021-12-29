@@ -2,6 +2,77 @@
 
 using namespace yy;
 
+namespace yy {
+  // template specification for double (which is possible to have NaN values)
+  template <>
+  auto readColumnValues(
+      parquet::TypedColumnReader<parquet::DoubleType> &typedColReader,
+      int64_t len)
+  {
+      std::vector<double> result(len);
+      // is this field required?
+      std::vector<int16_t> definition_levels(len);
+      // can this field repeat?
+      std::vector<int16_t> repetition_levels(len);
+
+      int64_t totalReadCount = 0;
+      // add this while loop for multiple parquet pages of a column
+      // see http://cloudsqale.com/2020/05/29/how-parquet-files-are-written-row-groups-pages-required-memory-and-flush-operations/
+      while (typedColReader.HasNext() && totalReadCount < len)
+      {
+          // fill values to the vector's raw data
+          // readCount == 0 means reaching the end of page (but not necessarily the column)
+          // set it as 1 to enter the loop, its value will be override in ReadBatch
+          for (int64_t readCount = 1; readCount > 0; totalReadCount += readCount)
+          {
+              u_char validBits[len / sizeof(double) + 1];
+              int64_t bitOffset = totalReadCount;
+              int64_t readLevels = 0;
+              int64_t nullCount = 0;
+              typedColReader.ReadBatchSpaced(
+                  len - totalReadCount,
+                  definition_levels.data() + totalReadCount,
+                  repetition_levels.data() + totalReadCount,
+                  result.data() + totalReadCount,
+                  validBits,
+                  bitOffset,
+                  &readLevels,
+                  &readCount,
+                  &nullCount);
+
+              if (nullCount == 0)
+              {
+                  continue;
+              }
+
+              int64_t filledNanCount = 0;
+              // there's null values
+              for (int64_t i = 0; i < readCount; i++)
+              {
+                  if (::arrow::BitUtil::GetBit(validBits, i + bitOffset) == false)
+                  {
+                      filledNanCount += 1;
+                      // assign NaN to null value
+                      result[i + bitOffset] = std::numeric_limits<double>::quiet_NaN();
+                  }
+              }
+              assert(filledNanCount == nullCount);
+          }
+      }
+
+      if (totalReadCount < len)
+      {
+          // it must reach the end of column
+          assert(typedColReader.HasNext() == false);
+          result.resize(totalReadCount);
+      }
+
+      return result;
+  }
+} /* yy */
+
+
+
 ParquetParser::ParquetParser(std::unique_ptr<parquet::ParquetFileReader> reader)
 : reader_(std::move(reader))
 {

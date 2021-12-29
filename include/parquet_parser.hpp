@@ -28,23 +28,21 @@ namespace yy {
       // see http://cloudsqale.com/2020/05/29/how-parquet-files-are-written-row-groups-pages-required-memory-and-flush-operations/
       while (typedColReader.HasNext() && totalReadCount < len)
       {
-          // set it as 1 to enter the loop, its value will be override in ReadBatch
-          int64_t readCount = 1;
-
-          // fill values to the vector's raw data
-          // readCount == 0 means reaching the end of page (but not necessarily the column)
-          for (; totalReadCount < len && readCount > 0; totalReadCount += readCount)
-          {
-              typedColReader.ReadBatch(
-                  len - totalReadCount,
-                  definition_levels.data() + totalReadCount,
-                  repetition_levels.data() + totalReadCount,
-                  result.data() + totalReadCount,
-                  &readCount);
-              // std::cout << "Parsing parquet column [" << typedColReader.descr()->name()
-              //           << "] expect to read [" << len << "], start from [" << totalReadCount
-              //           << "], this iteration read [" << readCount << "]\n";
-          }
+        // fill values to the vector's raw data
+        // readCount == 0 means reaching the end of page (but not necessarily the column)
+        // set it as 1 to enter the loop, its value will be override in ReadBatch
+        for (int64_t readCount = 1; readCount > 0; totalReadCount += readCount)
+        {
+            typedColReader.ReadBatch(
+                len - totalReadCount,
+                definition_levels.data() + totalReadCount,
+                repetition_levels.data() + totalReadCount,
+                result.data() + totalReadCount,
+                &readCount);
+            // std::cout << "Parsing parquet column [" << typedColReader.descr()->name()
+            //           << "] expect to read [" << len << "], start from [" << totalReadCount
+            //           << "], this iteration read [" << readCount << "]\n";
+        }
       }
 
       if (totalReadCount < len)
