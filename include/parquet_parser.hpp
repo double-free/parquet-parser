@@ -157,7 +157,7 @@ public:
   ~CachedParquetParser() {}
 
   // return nullopt if drained
-  std::optional<T> peekNext() {
+  std::optional<std::reference_wrapper<T>> peekNext() {
     if (cache_.empty()) {
       // try to parse next if nothing in cache
       cache_ = parseNextBatch();
@@ -166,8 +166,6 @@ public:
       return std::nullopt;
     }
 
-    // this is not good, it calls the default copy constructor
-    // what if the T need a deep copy and did not implement?
     return cache_.front();
   }
 
